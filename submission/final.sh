@@ -176,7 +176,21 @@ check_cmd "Getting address info"
 
 # STUDENT TASK: Extract the internal key (the x-only pubkey) from the descriptor
 # WRITE YOUR SOLUTION BELOW:
-INTERNAL_KEY=$(echo "$ADDR_INFO" | grep -o '"desc":"[^"]*' | sed 's/.*tr(\([^)]*\)).*/\1/')
+# Extract from descriptor field - taproot descriptors have format tr(key)
+if command -v jq &> /dev/null; then
+    DESCRIPTOR=$(echo "$ADDR_INFO" | jq -r '.desc')
+else
+    # Fallback: extract descriptor using grep - handle escaped quotes
+    DESCRIPTOR=$(echo "$ADDR_INFO" | sed 's/\\"/QUOTE/g' | grep -o '"desc":"[^"]*"' | cut -d'"' -f4 | sed 's/QUOTE/"/g')
+fi
+echo "Debug: Full descriptor: $DESCRIPTOR" >&2
+# Extract key from tr(...) format
+INTERNAL_KEY=$(echo "$DESCRIPTOR" | sed -n 's/.*tr(\([^)]*\)).*/\1/p')
+# Handle case where key might be null or empty
+if [ "$INTERNAL_KEY" = "null" ] || [ -z "$INTERNAL_KEY" ]; then
+    # Try alternate extraction method - look for hex key pattern
+    INTERNAL_KEY=$(echo "$ADDR_INFO" | grep -o '"desc":"[^"]*"' | grep -o '[0-9a-f]\{64\}')
+fi
 check_cmd "Extracting key from descriptor"
 INTERNAL_KEY=$(trim "$INTERNAL_KEY")
 
